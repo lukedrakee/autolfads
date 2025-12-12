@@ -5,7 +5,8 @@ docker_container=$2
 operation=$3
 source="$HOME/bucket"
 
-cmd_docker="docker run --runtime=nvidia -it --mount src=$source,target=/bucket,type=bind -d --rm --name=$docker_container snelbeta/radical:220311"
+# Use --gpus all instead of --runtime=nvidia for modern NVIDIA Container Toolkit
+cmd_docker="docker run --gpus all -it --mount src=$source,target=/bucket,type=bind -d --rm --name=$docker_container snelbeta/radical:latest"
 cmd_stop="docker stop $docker_container"
 check_docker="docker ps -q -f name=${docker_container}"
 for instance in $(gcloud compute instances list --filter="tags:$base_name AND STATUS:RUNNING" --format="csv[no-heading](name)")

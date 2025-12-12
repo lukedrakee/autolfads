@@ -1,41 +1,39 @@
 #!/bin/bash
+# Startup Script for PBT Client VMs
+# Modernized for Docker with NVIDIA Container Toolkit
 
-# Get nvidia-driver
-echo "Checking for CUDA and installing."
-# Check for CUDA and try to install.
-#if ! dpkg-query -W cuda-10-0; then
-#  # The 16.04 installer works with 16.10.
-#  curl -O http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-repo-ubuntu1604_10.0.130-1_amd64.deb
-#  dpkg -i ./cuda-repo-ubuntu1604_10.0.130-1_amd64.deb
-#  apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub
-#  apt-get update
-#  apt-get install cuda-10-0 -y
-#fi
+echo "Starting PBT client setup..."
 
-# Get Docker
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
-add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-apt-get update
-apt-cache policy docker-ce
-apt-get install -y docker-ce make
+# Install Docker if not present
+if ! command -v docker &> /dev/null; then
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+    add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+    apt-get update
+    apt-get install -y docker-ce docker-ce-cli containerd.io
+fi
 
-# Get nvidia-docker
-curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
+# Install NVIDIA Container Toolkit (replaces nvidia-docker2)
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+    tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 apt-get update
-apt-get install -y nvidia-docker2
-pkill -SIGHUP dockerd
+apt-get install -y nvidia-container-toolkit
+nvidia-ctk runtime configure --runtime=docker
+systemctl restart docker
 
-# Get gcsfuse
-export GCSFUSE_REPO=gcsfuse-`lsb_release -c -s`
-echo "deb http://packages.cloud.google.com/apt $GCSFUSE_REPO main" | tee /etc/apt/sources.list.d/gcsfuse.list
+# Install gcsfuse for bucket mounting
+export GCSFUSE_REPO=gcsfuse-$(lsb_release -c -s)
+echo "deb https://packages.cloud.google.com/apt $GCSFUSE_REPO main" | tee /etc/apt/sources.list.d/gcsfuse.list
 curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 apt-get update
 apt-get install -y gcsfuse
 
-# Pull the docker image
-docker pull snelbeta/radical:220311
+# Pull the RADICaL docker image (update tag as needed)
+docker pull snelbeta/radical:latest || docker pull snelbeta/radical:220311
 
-# Uncomment the /etc/fuse.conf line
-sed -i '8 s/^#//' /etc/fuse.conf
+# Enable user_allow_other for FUSE mounts
+sed -i 's/#user_allow_other/user_allow_other/' /etc/fuse.conf
+
+echo "PBT client setup complete."

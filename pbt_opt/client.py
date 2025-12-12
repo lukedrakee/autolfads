@@ -1,50 +1,63 @@
-from __future__ import print_function
-from __future__ import division
+#!/usr/bin/env python3
+"""
+Population Based Training (PBT) Client for LFADS/RADICaL
+Modernized for Python 3.9+ and TensorFlow 2.x
+"""
+
 import time
 from pbt_utils import DatabaseConnection
 import csv
-import sys, traceback
+import sys
+import traceback
 import os
 from itertools import cycle
-import builtins
 from multiprocessing.pool import ThreadPool
-from tensorflow.python.lib.io import file_io
-#import shutil
-#import os
+import tf_compat
+import io
+
 
 def outlogger(log_path, *args):
-    if not file_io.file_exists(log_path):
-        file_io.create_dir(log_path)
+    if not tf_compat.file_exists(log_path):
+        tf_compat.makedirs(log_path)
     outlog_file = os.path.join(log_path, 'out_log.txt')
-    if not file_io.file_exists(outlog_file):
-        f = file_io.FileIO(outlog_file, 'w')
-        f.write("")
-        f.close()
-    with file_io.FileIO(outlog_file, 'a') as f:
+    if not tf_compat.file_exists(outlog_file):
+        with tf_compat.file_open(outlog_file, 'w') as f:
+            f.write("")
+    with tf_compat.file_open(outlog_file, 'a') as f:
         strtext = (('{} ' * len(args)).format(*args))[:-1]
         print(strtext, file=f)
         print(strtext)
 
+
 def printer(data):
-    sys.stdout.write("\r\x1b[K" + data.__str__())
+    sys.stdout.write("\r\x1b[K" + str(data))
     sys.stdout.flush()
 
+
 def write_to_csv(filepath, listdict):
+    """Write data to CSV file, handling both GCS and local paths."""
+    if not listdict:
+        return
+
+    # Create CSV content in memory first
+    output = io.StringIO()
     if isinstance(listdict[0], dict):
-        keys = listdict[0].keys()
-        with file_io.FileIO(filepath, 'wb') as output_file:
-            dict_writer = csv.DictWriter(output_file, keys, extrasaction='ignore')
-            dict_writer.writeheader()
-            dict_writer.writerows(listdict)
+        keys = list(listdict[0].keys())
+        dict_writer = csv.DictWriter(output, keys, extrasaction='ignore')
+        dict_writer.writeheader()
+        dict_writer.writerows(listdict)
     else:
-        with file_io.FileIO(filepath, 'wb') as output_file:
-            wr = csv.writer(output_file, dialect='excel')
-            wr.writerows([[v] for v in listdict])
+        wr = csv.writer(output, dialect='excel')
+        wr.writerows([[v] for v in listdict])
+
+    # Write to file
+    with tf_compat.file_open(filepath, 'w') as f:
+        f.write(output.getvalue())
 
 
 class Client:
     def __init__(self, name, u_id, server_ip='localhost', port=27017, mongo_user='', mongo_passwd='',
-                 idle_timeout=5*60*60):
+                 idle_timeout=5 * 60 * 60):
         self.u_id = u_id
         self.status = 'init'
         global DB
@@ -53,7 +66,7 @@ class Client:
         self.train_func = None
         self.worker_uid = None
         self.current_worker = {}
-        self.idle_timeout = idle_timeout    # in seconds
+        self.idle_timeout = idle_timeout  # in seconds
 
     def set_train_func(self, train_func):
         self.train_func = train_func
@@ -61,12 +74,11 @@ class Client:
     def set_status(self, status):
         self.status = status
         DB.write_one('process', self.u_id, 'status', status)
-        #DB.write_one('process', self.u_id, 'last_update', time.time())
 
     def check_for_worker(self):
         self.current_worker = None
         worker_uid = DB.read_one('process', self.u_id, 'worker_uid')
-        if worker_uid == None or worker_uid < 0:
+        if worker_uid is None or worker_uid < 0:
             return False
         worker_status = DB.read_one('worker', worker_uid, 'status')
         # this has been taken care of in the server
@@ -75,15 +87,12 @@ class Client:
 
         self.current_worker = {}
         self.current_worker['status'] = worker_status
-        self.current_worker['performance'] = None #DB.read_one('worker', worker_uid, 'performance')
+        self.current_worker['performance'] = None
         self.current_worker['epochs_per_generation'] = DB.read_one('worker', worker_uid, 'epochs_per_generation')
         self.current_worker['hps'] = DB.read_one('worker', worker_uid, 'hyperparams')
         self.current_worker['run_save_path'] = DB.read_one('worker', worker_uid, 'run_save_path')
         self.current_worker['ckpt_load_path'] = DB.read_one('worker', worker_uid, 'ckpt_load_path')
-        # you can initialize self.current_worker['ckpt_save_file'] = None
-        # this can be obtained by run_save_path as well (based on directory structure)
-        # added for more flexible use
-        self.current_worker['ckpt_save_file'] = None #DB.read_one('worker', worker_uid, 'ckpt_save_file')
+        self.current_worker['ckpt_save_file'] = None
         self.current_worker['hp_trace'] = DB.read_one('worker', worker_uid, 'hps_history')
         self.current_worker['generation'] = DB.read_one('worker', worker_uid, 'generation')
         self.current_worker['perf_history'] = DB.read_one('worker', worker_uid, 'perf_history')
@@ -94,11 +103,6 @@ class Client:
 
     def do_kill(self):
         return DB.read_one('process', self.u_id, 'do_kill')
-        # explicit in case
-        #if val:
-        #    return True
-        #else:
-        #    return False
 
     def write_worker_db(self):
         DB.write_one('worker', self.worker_uid, 'status', self.current_worker['status'])
@@ -107,16 +111,10 @@ class Client:
         DB.write_one('worker', self.worker_uid, 'perf_history', self.current_worker['perf_history'])
         # make sure to update the status the last thing
         DB.write_one('worker', self.worker_uid, 'status', self.current_worker['status'])
-        #DB.write_one('worker', self.worker_uid, 'epochs_per_generation', self.epochs_per_generation)
-        #DB.write_one('worker', self.worker_uid, 'hyperparams', self.current_worker['hps'])
-        #DB.write_one('worker', self.worker_uid, 'run_save_path', self.run_save_path)
-        #DB.write_one('worker', self.worker_uid, 'ckpt_load_path', self.ckpt_load_path)
-        #DB.write_one('worker', self.worker_uid, 'hps_history', self.hps_trace)
-        #DB.write_one('worker', self.worker_uid, 'generation', self.generation)
 
     def run_worker(self):
         start_time = time.time()
-        assert self.current_worker != None, 'worker is None!'
+        assert self.current_worker is not None, 'worker is None!'
         w_path = self.current_worker['run_save_path']
 
         self.set_status('busy')
@@ -125,14 +123,13 @@ class Client:
         outlogger(w_path, '')
         outlogger(w_path, '====================================')
         outlogger(w_path, 'Process {} is running Worker {} in Generation {}'
-              .format(self.u_id, self.worker_uid, self.current_worker['generation']))
+                  .format(self.u_id, self.worker_uid, self.current_worker['generation']))
         outlogger(w_path, 'Checkpoint load path: {}'.format(self.current_worker['ckpt_load_path']))
         outlogger(w_path, 'Job save path: {}'.format(self.current_worker['run_save_path']))
 
         # run the model for certain number of steps and return performance and ckpt file path
         # with error handling
         try:
-        #if True:
             performance, ckpt_save_file = self.train_func(self.current_worker['hps'],
                                                           self.current_worker['run_save_path'],
                                                           self.current_worker['ckpt_load_path'],
@@ -141,16 +138,15 @@ class Client:
             DB.write_one('process', self.u_id, 'time_taken', time.time() - start_time)
             outlogger(w_path, 'process {} finished running worker {}'.format(self.u_id, self.worker_uid))
             self.current_worker['status'] = 'ready'
-        except:
+        except Exception:
             outlogger(w_path, '###################################### Exception Message:')
             outlogger(w_path, 'Exception occurred in Worker {} at Generation {}. Skipping it. Details:'
-                  .format(self.worker_uid, self.current_worker['generation']))
+                      .format(self.worker_uid, self.current_worker['generation']))
             exc_type, exc_value, exc_traceback = sys.exc_info()
             var = traceback.format_exc()
             outlogger(w_path, '{}'.format(var))
             outlogger(w_path, '###################################### End of Exception Message.')
             performance = None
-            #ckpt_save_file = '{} {}'.format(repr(exc_type), repr(exc_value)) # use this to pass the error value
             ckpt_save_file = '{}'.format(var)
             self.current_worker['status'] = 'error'
 
@@ -163,35 +159,32 @@ class Client:
         if 'kind' in self.current_worker:
             if self.current_worker['kind'] != 'posterior_sample_and_average':
                 write_to_csv(os.path.join(self.current_worker['run_save_path'], 'hp_history.csv'),
-                         self.current_worker['hp_trace'])
+                             self.current_worker['hp_trace'])
                 write_to_csv(os.path.join(self.current_worker['run_save_path'], 'perf_history.csv'),
-                         self.current_worker['perf_history'])
+                             self.current_worker['perf_history'])
         else:
             write_to_csv(os.path.join(self.current_worker['run_save_path'], 'hp_history.csv'),
-                        self.current_worker['hp_trace'])
+                         self.current_worker['hp_trace'])
             write_to_csv(os.path.join(self.current_worker['run_save_path'], 'perf_history.csv'),
-                        self.current_worker['perf_history'])
+                         self.current_worker['perf_history'])
 
         DB.write_one('process', self.u_id, 'worker_uid', -1)
         self.set_status('free')
-
 
     def keep_alive(self):
         # Update the time stamp in the db
         while True:
             if self.do_kill():
                 self.set_status('killed')
-                print("Kill signal received from the Sever!")
+                print("Kill signal received from the Server!")
                 self.shutdown()
             DB.write_one('process', self.u_id, 'last_update', time.time())
             time.sleep(5)
 
     def start_loop(self):
-        assert self.train_func != None, 'No function to train!'
-        #cir_char = cycle(['-', '\\', '|', '/'])
-        #os.system('setterm -cursor off')
+        assert self.train_func is not None, 'No function to train!'
 
-        # start a thread to continuously update the database with the lasted time stamp
+        # start a thread to continuously update the database with the latest time stamp
         print('================ Process started...')
         pool = ThreadPool(processes=1)
         pool.apply_async(self.keep_alive)
@@ -203,11 +196,9 @@ class Client:
             print("")
             time_last_assigned = time.time()
             while not (self.check_for_worker()):
-                # Moved this up to prevent cluttering the log file
-                #printer('Process {} is free! Waiting for worker... {}'.format(self.u_id, next(cir_char)))
                 time.sleep(0.2)
                 if time.time() - time_last_assigned > self.idle_timeout:
-                    print('Process has been idle for {0:0.0f} minutes!'.format(self.idle_timeout//60))
+                    print('Process has been idle for {0:0.0f} minutes!'.format(self.idle_timeout // 60))
                     self.set_status('killed')
                     self.shutdown()
             # run the worker
