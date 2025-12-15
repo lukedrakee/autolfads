@@ -189,7 +189,8 @@ These files implement distributed training infrastructure on GCP. They are **reu
 | TensorFlow | 2.13+ | Using tf.compat.v1 for LFADS compatibility |
 | MongoDB | 6.0+ | Server uses mongosh shell |
 | Docker | Latest | NVIDIA Container Toolkit (--gpus all) |
-| GCP Images | common-cu121 | Deep Learning VM with CUDA 12.1 |
+| GCP Server Image | debian-12 | Standard Debian for MongoDB server (no GPU needed) |
+| GCP Client Images | common-cu121 | Deep Learning VM with CUDA 12.1 for GPU workers |
 
 ### Dependencies (requirements.txt equivalent)
 
@@ -227,6 +228,8 @@ h5py>=3.7.0
 
 ## Getting Started
 
+> **Note:** When running shell scripts in Google Cloud Shell, use `sh script.sh` instead of `./script.sh` to avoid permission issues.
+
 1. **Setup GCP Project**
    ```bash
    gcloud config set project YOUR_PROJECT_ID
@@ -235,12 +238,12 @@ h5py>=3.7.0
 2. **Create Server VM**
    ```bash
    cd gcloud_scripts
-   ./server_set_up.sh my-server us-central1-a
+   sh server_set_up.sh my-server us-central1-a
    ```
 
 3. **Create Client VMs**
    ```bash
-   ./machine_setup.sh pbtclient 4 us-central1-a nvidia-tesla-t4
+   sh machine_setup.sh pbtclient 4 us-central1-a nvidia-tesla-t4
    ```
 
 4. **Run PBT Training**

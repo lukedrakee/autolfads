@@ -1,18 +1,29 @@
 #!/bin/bash
 # Server Setup Script for PBT - Modernized for current GCP
 # Creates a MongoDB server VM with Python 3 and modern dependencies
+#
+# Usage: sh server_set_up.sh <server-name> <zone>
+# Example: sh server_set_up.sh my-server us-central1-a
+#
+# Note: Use 'sh' to run this script in Google Cloud Shell (not './')
 
 SERVER_NAME=$1
 ZONE=$2
 
+if [ -z "$SERVER_NAME" ] || [ -z "$ZONE" ]; then
+    echo "Usage: sh server_set_up.sh <server-name> <zone>"
+    echo "Example: sh server_set_up.sh my-server us-central1-a"
+    exit 1
+fi
+
 gcloud config set compute/zone ${ZONE}
 
-# Use modern deep learning VM image with Python 3
+# Use standard Debian image (MongoDB server doesn't need ML frameworks)
 gcloud compute instances create ${SERVER_NAME} \
     --machine-type=n1-standard-4 \
     --boot-disk-size=300GB \
-    --image-project=deeplearning-platform-release \
-    --image-family=common-cpu \
+    --image-project=debian-cloud \
+    --image-family=debian-12 \
     --zone=${ZONE} \
     --scopes=cloud-platform \
     --tags=${SERVER_NAME} \
@@ -22,7 +33,8 @@ gcloud config set compute/zone ${ZONE}
 # Install MongoDB 6.0 (current stable)
 apt-get install -y gnupg curl
 curl -fsSL https://pgp.mongodb.com/server-6.0.asc | gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor
-echo 'deb [ signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] http://repo.mongodb.org/apt/debian bullseye/mongodb-org/6.0 main' | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+# Use bookworm for Debian 12
+echo 'deb [ signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/6.0 main' | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
 apt-get update
 apt-get install -y mongodb-org
 echo 'mongodb-org hold' | dpkg --set-selections
