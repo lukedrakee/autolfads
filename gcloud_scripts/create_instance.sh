@@ -27,7 +27,7 @@ gcloud compute instances create ${INSTANCE_NAME} \
   --accelerator type=${GPU},count=${NUM_GPUS} \
   --min-cpu-platform "Automatic" \
   --tags "pbtclient" \
-  --image-family "common-cu113" \
+  --image-family "common-cu128-ubuntu-2204-nvidia-570" \
   --image-project "deeplearning-platform-release" \
   --metadata="install-nvidia-driver=True" \
   --boot-disk-type "pd-ssd" \

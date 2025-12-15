@@ -190,7 +190,7 @@ These files implement distributed training infrastructure on GCP. They are **reu
 | MongoDB | 7.0+ | Server uses mongosh shell (7.0 required for Debian 12) |
 | Docker | Latest | NVIDIA Container Toolkit (--gpus all) |
 | GCP Server Image | debian-12 | Standard Debian for MongoDB server (no GPU needed) |
-| GCP Client Images | common-cu113 | Deep Learning VM with CUDA 11.3 for GPU workers |
+| GCP Client Images | common-cu128-ubuntu-2204-nvidia-570 | Deep Learning VM with CUDA 12.8, Ubuntu 22.04 |
 
 ### Dependencies (requirements.txt equivalent)
 
