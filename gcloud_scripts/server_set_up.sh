@@ -84,8 +84,34 @@ else
     echo "exit status is $out"
 fi
 
+# Wait for MongoDB to be installed by startup script (can take several minutes)
+echo "Waiting for MongoDB installation to complete (this may take 3-5 minutes)..."
+max_attempts=30
+attempt=0
+while [ $attempt -lt $max_attempts ]; do
+    attempt=$((attempt+1))
+    echo "Checking for mongosh... (attempt $attempt/$max_attempts)"
+    if gcloud compute ssh ${SERVER_NAME} --zone=${ZONE} --command='which mongosh' 2>/dev/null; then
+        echo "MongoDB installed successfully!"
+        break
+    fi
+    if [ $attempt -eq $max_attempts ]; then
+        echo "ERROR: MongoDB installation timed out. Check startup script logs with:"
+        echo "  gcloud compute ssh ${SERVER_NAME} --zone=${ZONE} --command='sudo journalctl -u google-startup-scripts.service'"
+        exit 1
+    fi
+    sleep 10
+done
+
+# Wait a bit more for mongod service to start
+echo "Waiting for MongoDB service to start..."
+sleep 10
+
 # Configure MongoDB with authentication
+echo "Configuring MongoDB authentication..."
 gcloud compute ssh ${SERVER_NAME} --zone=${ZONE} --command='sudo mongosh admin --host 127.0.0.1:27017 --eval "db.createUser({user: \"pbt_user\", pwd: \"pbt0Pass\", roles: [ { role: \"userAdminAnyDatabase\", db: \"admin\" }]});db.grantRolesToUser(\"pbt_user\", [{ role: \"readWriteAnyDatabase\", db: \"admin\" }]);" && sudo sed -i "/bindIp/d" /etc/mongod.conf && echo "security:
    authorization: enabled
 net:
    bindIp: 127.0.0.1,$(hostname -I)" | sudo tee -a /etc/mongod.conf && sudo systemctl restart mongod.service'
+
+echo "Server setup complete!"
