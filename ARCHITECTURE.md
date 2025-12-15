@@ -187,7 +187,7 @@ These files implement distributed training infrastructure on GCP. They are **reu
 |-----------|---------|-------|
 | Python | 3.9+ | All code updated for Python 3 |
 | TensorFlow | 2.13+ | Using tf.compat.v1 for LFADS compatibility |
-| MongoDB | 6.0+ | Server uses mongosh shell |
+| MongoDB | 7.0+ | Server uses mongosh shell (7.0 required for Debian 12) |
 | Docker | Latest | NVIDIA Container Toolkit (--gpus all) |
 | GCP Server Image | debian-12 | Standard Debian for MongoDB server (no GPU needed) |
 | GCP Client Images | common-cu121 | Deep Learning VM with CUDA 12.1 for GPU workers |

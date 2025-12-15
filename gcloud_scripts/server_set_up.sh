@@ -30,11 +30,10 @@ gcloud compute instances create ${SERVER_NAME} \
     --metadata startup-script="#!/bin/bash
 gcloud config set compute/zone ${ZONE}
 
-# Install MongoDB 6.0 (current stable)
+# Install MongoDB 7.0 (required for Debian 12/bookworm - MongoDB 6.0 doesn't support bookworm)
 apt-get install -y gnupg curl
-curl -fsSL https://pgp.mongodb.com/server-6.0.asc | gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor
-# Use bookworm for Debian 12
-echo 'deb [ signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/6.0 main' | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
+echo 'deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main' | tee /etc/apt/sources.list.d/mongodb-org-7.0.list
 apt-get update
 apt-get install -y mongodb-org
 echo 'mongodb-org hold' | dpkg --set-selections
@@ -46,14 +45,14 @@ mkdir -p /db/db_data
 systemctl enable mongod.service
 systemctl start mongod.service
 
-# Install Python packages with pip3
-apt-get install -y moreutils python3-pip
-pip3 install --upgrade pip
-pip3 install --upgrade google-cloud-storage
-pip3 install --upgrade pymongo
-pip3 install grpcio>=1.50.0
-pip3 install protobuf>=4.21.0
-pip3 install tensorflow>=2.13.0
+# Install Python packages with pip3 (--break-system-packages needed for Debian 12 PEP 668)
+apt-get install -y moreutils python3-pip python3-full
+pip3 install --break-system-packages --upgrade pip
+pip3 install --break-system-packages --upgrade google-cloud-storage
+pip3 install --break-system-packages --upgrade pymongo
+pip3 install --break-system-packages 'grpcio>=1.50.0'
+pip3 install --break-system-packages 'protobuf>=4.21.0'
+pip3 install --break-system-packages 'tensorflow>=2.13.0'
 
 # Install gcsfuse for bucket mounting
 export GCSFUSE_REPO=gcsfuse-\$(lsb_release -c -s)
