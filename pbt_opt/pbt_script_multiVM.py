@@ -22,20 +22,27 @@ nprocess_gpu = 3
 
 pbt_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, pbt_path)
+
+# Get absolute path to gcloud_scripts directory
+repo_root = os.path.dirname(pbt_path)
+gcloud_scripts_path = os.path.join(repo_root, 'gcloud_scripts')
+mounting_script = os.path.join(gcloud_scripts_path, 'mounting.sh')
+docker_script = os.path.join(gcloud_scripts_path, 'docker_setup.sh')
+
 helper = pbtHelper(bucket_name, data_path, run_path, name, nprocess_gpu)
 my_zone = helper.my_zone
 server_id=helper.server_id
 machine_name=helper.machine_name
 container_name=helper.container_name
 
-subprocess.call(["../gcloud_scripts/mounting.sh {} {} u".format(server_id, bucket_name)], shell=True)
-subprocess.call(["../gcloud_scripts/mounting.sh {} {} m".format(server_id, bucket_name)], shell=True)
+subprocess.call(["{} {} {} u".format(mounting_script, server_id, bucket_name)], shell=True)
+subprocess.call(["{} {} {} m".format(mounting_script, server_id, bucket_name)], shell=True)
 
-subprocess.call(["../gcloud_scripts/mounting.sh {} {} u".format(machine_name, bucket_name)], shell=True)
-subprocess.call(["../gcloud_scripts/docker_setup.sh {} {} stop".format(machine_name, container_name)], shell=True)
+subprocess.call(["{} {} {} u".format(mounting_script, machine_name, bucket_name)], shell=True)
+subprocess.call(["{} {} {} stop".format(docker_script, machine_name, container_name)], shell=True)
 
-subprocess.call(["../gcloud_scripts/mounting.sh {} {} m".format(machine_name, bucket_name)], shell=True)
-subprocess.call(["../gcloud_scripts/docker_setup.sh {} {} start".format(machine_name, container_name)], shell=True)
+subprocess.call(["{} {} {} m".format(mounting_script, machine_name, bucket_name)], shell=True)
+subprocess.call(["{} {} {} start".format(docker_script, machine_name, container_name)], shell=True)
 
 
 run_save_path = helper.run_save_path
