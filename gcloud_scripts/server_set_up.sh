@@ -30,8 +30,11 @@ gcloud compute instances create ${SERVER_NAME} \
     --metadata startup-script="#!/bin/bash
 gcloud config set compute/zone ${ZONE}
 
+# Install basic dependencies first
+apt-get update
+apt-get install -y git python3 python3-pip python3-full gnupg curl moreutils
+
 # Install MongoDB 7.0 (required for Debian 12/bookworm - MongoDB 6.0 doesn't support bookworm)
-apt-get install -y gnupg curl
 curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
 echo 'deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main' | tee /etc/apt/sources.list.d/mongodb-org-7.0.list
 apt-get update
@@ -46,7 +49,6 @@ systemctl enable mongod.service
 systemctl start mongod.service
 
 # Install Python packages with pip3 (--break-system-packages needed for Debian 12 PEP 668)
-apt-get install -y moreutils python3-pip python3-full
 pip3 install --break-system-packages --upgrade pip
 pip3 install --break-system-packages --upgrade google-cloud-storage
 pip3 install --break-system-packages --upgrade pymongo
