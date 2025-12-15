@@ -30,8 +30,12 @@ curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 apt-get update
 apt-get install -y gcsfuse
 
-# Pull the RADICaL docker image (update tag as needed)
-docker pull snelbeta/radical:latest || docker pull snelbeta/radical:220311
+# Docker image will be pulled on demand by docker_setup.sh
+# If using a custom image, build and push it first:
+#   cd docker-build-steps
+#   docker build -t gcr.io/YOUR_PROJECT/radical:latest .
+#   docker push gcr.io/YOUR_PROJECT/radical:latest
+# Then update pbt_script_multiVM.py with your image name
 
 # Enable user_allow_other for FUSE mounts
 sed -i 's/#user_allow_other/user_allow_other/' /etc/fuse.conf

@@ -19,6 +19,13 @@ name = 'lfadsRunx'
 # nprocess_gpu : Number of processes on each client machine/gpu
 nprocess_gpu = 3
 
+# Docker image to use on client machines
+# Options:
+#   - 'tensorflow/tensorflow:2.13.0-gpu' : Public TensorFlow image (default, no custom code)
+#   - 'gcr.io/YOUR_PROJECT/radical:latest' : Custom image built from docker-build-steps/Dockerfile
+# To build custom image: cd docker-build-steps && docker build -t gcr.io/YOUR_PROJECT/radical:latest . && docker push gcr.io/YOUR_PROJECT/radical:latest
+docker_image = 'tensorflow/tensorflow:2.13.0-gpu'
+
 
 pbt_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, pbt_path)
@@ -39,10 +46,10 @@ subprocess.call(["{} {} {} u".format(mounting_script, server_id, bucket_name)], 
 subprocess.call(["{} {} {} m".format(mounting_script, server_id, bucket_name)], shell=True)
 
 subprocess.call(["{} {} {} u".format(mounting_script, machine_name, bucket_name)], shell=True)
-subprocess.call(["{} {} {} stop".format(docker_script, machine_name, container_name)], shell=True)
+subprocess.call(["{} {} {} stop {}".format(docker_script, machine_name, container_name, docker_image)], shell=True)
 
 subprocess.call(["{} {} {} m".format(mounting_script, machine_name, bucket_name)], shell=True)
-subprocess.call(["{} {} {} start".format(docker_script, machine_name, container_name)], shell=True)
+subprocess.call(["{} {} {} start {}".format(docker_script, machine_name, container_name, docker_image)], shell=True)
 
 
 run_save_path = helper.run_save_path
