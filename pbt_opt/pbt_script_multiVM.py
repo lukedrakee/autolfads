@@ -11,10 +11,10 @@ from pbt_helper_fn import pbtHelper
 # data_path : Data directory in the bucket
 # run_path : Run directory in the bucket
 # name : Run name
-bucket_name = 'test-bucket-raghav'
+bucket_name = 'luke-autolfads-bucket'
 data_path = 'data'
-run_path = 'run_x'
-name = 'lfadsRunx'
+run_path = 'runs'
+name = 'test-trial-1'
 
 # nprocess_gpu : Number of processes on each client machine/gpu
 nprocess_gpu = 3
