@@ -15,8 +15,10 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Add project files
-ADD . /snel
+# Clone the repository into the container
+RUN git clone https://github.com/lukedrakee/autolfads.git /snel \
+    && cd /snel \
+    && git checkout claude/radical-neural-analysis-01KpfvJqeYWzZEritRQ1wovr
 
 # Install Python dependencies
 RUN pip install --upgrade pip && \
@@ -31,7 +33,10 @@ RUN pip install --upgrade pip && \
     h5py>=3.7.0
 
 # Set environment paths
-ENV PATH="/snel/lfadslite/:${PATH}"
-ENV PYTHONPATH="/snel/autoLFADS-beta/pbt_opt/:/snel/lfadslite/:${PYTHONPATH}"
+ENV PATH="/snel/pbt_opt/:${PATH}"
+ENV PYTHONPATH="/snel/pbt_opt/:/snel/lfadslite/:${PYTHONPATH}"
+
+# Make scripts executable
+RUN chmod +x /snel/pbt_opt/run_lfads_client.sh
 
 EXPOSE 80
