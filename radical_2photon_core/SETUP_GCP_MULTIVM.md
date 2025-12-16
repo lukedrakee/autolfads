@@ -1,261 +1,125 @@
-# RADICaL for 2-Photon Calcium Imaging: GCP Multi-VM Setup
+# RADICaL Multi-VM Training on GCP (Simplified)
 
-This guide explains how to set up RADICaL (LFADS for calcium imaging) on Google Cloud Platform with multiple GPU VMs for distributed training with Population Based Training (PBT).
+## The Core Concept
 
----
+Multi-VM training runs multiple LFADS models in parallel across several GPU machines. Each model tries different hyperparameters, and Population Based Training (PBT) keeps the best-performing ones.
 
-## Overview
-
-**What you're building:**
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Google Cloud Platform                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌─────────────────┐          ┌─────────────────────────────┐  │
-│  │   Server VM     │          │       Client VMs (GPUs)     │  │
-│  │                 │          │                             │  │
-│  │  - MongoDB      │◄────────►│  - Docker containers        │  │
-│  │  - PBT Server   │  coords  │  - LFADS model training     │  │
-│  │  - Coordinates  │          │  - One model per GPU        │  │
-│  │    hyperparams  │          │                             │  │
-│  └─────────────────┘          └─────────────────────────────┘  │
-│           │                              │                      │
-│           └──────────────┬───────────────┘                      │
-│                          ▼                                      │
-│           ┌─────────────────────────────┐                       │
-│           │     GCS Bucket              │                       │
-│           │  - Your calcium imaging data│                       │
-│           │  - Model checkpoints        │                       │
-│           │  - Training results         │                       │
-│           └─────────────────────────────┘                       │
-└─────────────────────────────────────────────────────────────────┘
+You need:
+1. A place to store data and results  →  GCS Bucket
+2. Multiple GPUs to train models      →  GPU VMs
+3. A way to coordinate which hyperparameters to try  →  Simple shared file or database
 ```
 
 ---
 
-## Components You Need
+## Simplest Possible Setup
 
-### 1. External Dependencies (NOT in this repo)
+### Option A: Manual Multi-VM (No Orchestration)
 
-| Package | Source | Purpose |
-|---------|--------|---------|
-| **lfadslite** | [snel-repo/lfads-cd](https://github.com/snel-repo/lfads-cd) `radical` branch | The actual LFADS neural network with `zi-gamma` output distribution |
-| **run_lfadslite.py** | Same repo | Helper functions for LFADS |
+Skip the complex PBT infrastructure entirely. Just run independent training jobs:
 
 ```bash
-# Get the LFADS model code
-git clone https://github.com/snel-repo/lfads-cd.git
-cd lfads-cd
-git checkout radical
+# 1. Create a bucket
+gsutil mb gs://my-calcium-data
+
+# 2. Upload your data (HDF5 format)
+gsutil cp my_train_data.h5 gs://my-calcium-data/
+
+# 3. Create GPU VMs (repeat for each)
+gcloud compute instances create gpu-vm-1 \
+    --zone=us-central1-a \
+    --machine-type=n1-standard-4 \
+    --accelerator=type=nvidia-tesla-t4,count=1 \
+    --image-family=pytorch-latest-gpu \
+    --image-project=deeplearning-platform-release \
+    --maintenance-policy=TERMINATE
+
+# 4. SSH in and install
+gcloud compute ssh gpu-vm-1
+pip install tensorflow h5py
+
+# 5. Clone LFADS and run with different hyperparameters on each VM
+git clone https://github.com/snel-repo/autolfads-tf2.git
+# Edit config, set output_dist='zi-gamma', run training
 ```
 
-### 2. From This Repository
-
-| File | Purpose |
-|------|---------|
-| `radical_hyperparameters.py` | RADICaL-specific hyperparameter configuration |
-| `pbt_opt/lfads_wrapper/lfads_wrapper.py` | Wrapper that calls lfadslite for training |
-| `pbt_opt/lfads_wrapper/run_posterior_mean_sampling.py` | Extract latent factors from trained model |
-| `pbt_opt/server.py` | PBT server (coordinates distributed training) |
-| `pbt_opt/client.py` | PBT client (runs on GPU VMs) |
-| `gcloud_scripts/*.sh` | GCP infrastructure scripts |
+**Pros:** Simple, no dependencies, easy to debug
+**Cons:** Manual hyperparameter management, no automatic coordination
 
 ---
 
-## Data Format Requirements
+### Option B: Use Vertex AI (Google's Managed Service)
 
-Your 2-photon calcium imaging data must be in HDF5 format:
+Let Google handle the infrastructure:
 
-```
-your_bucket/data/
-├── lfads_train_data.h5
-├── lfads_valid_data.h5
-└── lfads_test_data.h5  (optional)
-```
-
-Each HDF5 file should contain:
-```python
-# Required shape: (num_trials, num_timepoints, num_neurons)
-train_data = h5_file['train_data']  # shape: (N_trials, T, N_neurons)
-
-# Example: 500 trials, 100 timepoints, 200 neurons
-# train_data.shape = (500, 100, 200)
+```bash
+# Package your training code
+# Submit hyperparameter tuning job
+gcloud ai hp-tuning-jobs create \
+    --region=us-central1 \
+    --config=hptuning_config.yaml
 ```
 
-**Data preprocessing tips for calcium imaging:**
-- Use ΔF/F (normalized fluorescence change)
-- Align trials to behavioral events
-- Ensure consistent trial lengths
-- Remove artifacts/bad trials
+**Pros:** Google manages VMs, automatic hyperparameter tuning
+**Cons:** Requires learning Vertex AI, some setup overhead
 
 ---
 
-## RADICaL-Specific Configuration
+## What Makes It "RADICaL"
 
-The key difference from standard LFADS is the output distribution. In your training script:
+Regardless of infrastructure, the only thing that makes LFADS work for calcium imaging is:
 
 ```python
-# CRITICAL: This makes it RADICaL (for calcium) vs LFADS (for spikes)
-hyperparameters = {
-    'output_dist': 'zi-gamma',  # Zero-inflated gamma for calcium
-
-    # RADICaL-specific parameters
-    'temporal_shift': 0,
-    'fac_2_rates_transform': 'linscaledsigmoid',
-    'gamma_prior': 20.0,        # Tune this! Range: 1-100
-    's_min': 0.1,
-    'l2_gamma_distance_scale': 1e-4,
-}
+output_dist = 'zi-gamma'  # Instead of 'poisson' for spike data
 ```
 
-**Why `zi-gamma`?**
-- Calcium fluorescence is non-negative (unlike spike counts which are integers)
-- Zero-inflated gamma models the heavy-tailed, non-negative distribution of ΔF/F
-- Accounts for baseline fluorescence and indicator saturation effects
+Everything else (PBT, Docker, MongoDB) is optimization infrastructure, not the core algorithm.
 
 ---
 
-## GCP Setup Steps
+## Data Format
 
-### Step 1: Create GCS Bucket
-
-```bash
-# Create bucket for your data and results
-gsutil mb gs://your-bucket-name
-
-# Upload your data
-gsutil -m cp -r ./your_data/* gs://your-bucket-name/data/
-```
-
-### Step 2: Create Server VM
-
-The server runs MongoDB and coordinates PBT training:
-
-```bash
-cd gcloud_scripts
-sh server_set_up.sh my-server us-central1-a
-```
-
-**What this creates:**
-- Debian 12 VM with MongoDB 7.0
-- Python 3 with required packages
-- Network access for client coordination
-
-### Step 3: Create GPU Client VMs
-
-```bash
-sh machine_setup.sh pbtclient 4 us-central1-a nvidia-tesla-t4
-```
-
-**What this creates:**
-- 4 GPU VMs (pbtclient1, pbtclient2, pbtclient3, pbtclient4)
-- Docker with NVIDIA Container Toolkit
-- Clones repo and builds Docker image with lfadslite
-
-### Step 4: Configure Training Script
-
-On the server, edit `pbt_opt/pbt_script_multiVM.py`:
+Your calcium data needs to be:
+- HDF5 file
+- Shape: `(num_trials, num_timepoints, num_neurons)`
+- Values: ΔF/F (normalized fluorescence)
 
 ```python
-# Your settings
-bucket_name = 'your-bucket-name'
-data_path = 'data'
-run_path = 'runs'
-name = 'my-calcium-experiment'
+import h5py
+import numpy as np
 
-nprocess_gpu = 3  # Number of parallel models per GPU
-```
-
-### Step 5: Run Training
-
-```bash
-# SSH to server
-gcloud compute ssh my-server --zone=us-central1-a
-
-# Run PBT
-cd ~/autolfads
-python3 pbt_opt/pbt_script_multiVM.py
+# Example: save your data
+with h5py.File('train_data.h5', 'w') as f:
+    # calcium_data shape: (500 trials, 100 timepoints, 150 neurons)
+    f.create_dataset('train_data', data=calcium_data)
 ```
 
 ---
 
-## Extracting Results (Post-Training)
+## Recommendation
 
-After training completes, extract latent factors:
+**If you're not familiar with Docker/MongoDB/distributed systems:**
 
-```python
-from lfads_wrapper.run_posterior_mean_sampling import run_posterior_sample_and_average
+Start with the **Local GPU Setup** (see `SETUP_LOCAL_GPU.md`). Get a single model training successfully first. The multi-VM setup is only worth it if:
+- You have a lot of data
+- You need to try many hyperparameter combinations
+- Training time on one GPU is prohibitively long
 
-# Run posterior sampling on best model
-run_posterior_sample_and_average(
-    model_dir='/path/to/best/model',
-    data_file='lfads_valid_data.h5',
-    output_file='posterior_means.h5'
-)
-```
-
-**Output contains:**
-- `factors` - Latent neural dynamics (shape: trials × time × factors_dim)
-- `output_dist_params` - Inferred firing rates
-- `controller_outputs` - If using controller
+For most 2-photon experiments, a single GPU is sufficient.
 
 ---
 
-## Cost Considerations
+## If You Still Want Full PBT Multi-VM
 
-| Resource | Approximate Cost |
-|----------|-----------------|
-| Server VM (n1-standard-4) | ~$0.15/hour |
-| Client VM with T4 GPU | ~$0.35/hour each |
-| 4 clients for 24 hours | ~$34 |
+The original repo's approach uses:
+- **MongoDB** on a server VM to track hyperparameters
+- **Docker** on client VMs to ensure consistent environments
+- **gcsfuse** to mount cloud storage as a filesystem
 
-**Tips to reduce cost:**
-- Use preemptible VMs (80% cheaper, but can be terminated)
-- Start with fewer clients to test
-- Delete VMs when not training
+If you want to use this, the key files are:
+- `gcloud_scripts/server_set_up.sh` - Creates server with MongoDB
+- `gcloud_scripts/machine_setup.sh` - Creates GPU clients
+- `pbt_opt/pbt_script_multiVM.py` - Main training script (edit bucket name, paths)
 
----
-
-## Troubleshooting
-
-### "Cannot find lfadslite"
-Ensure the lfadslite package is in your PYTHONPATH:
-```bash
-export PYTHONPATH="/path/to/lfads-cd:$PYTHONPATH"
-```
-
-### "Docker container not starting"
-Check if the Docker image built correctly:
-```bash
-gcloud compute ssh pbtclient1 --command="docker images | grep radical"
-```
-
-### "MongoDB connection refused"
-Verify MongoDB is running:
-```bash
-gcloud compute ssh my-server --command="sudo systemctl status mongod"
-```
-
----
-
-## Files Summary
-
-```
-Required from this repo:
-├── pbt_opt/
-│   ├── server.py              # PBT coordination
-│   ├── client.py              # Worker process
-│   ├── lfads_wrapper/
-│   │   ├── lfads_wrapper.py   # Training wrapper
-│   │   └── run_posterior_mean_sampling.py  # Extract factors
-│   └── pbt_script_multiVM.py  # Main config (edit this)
-├── gcloud_scripts/            # Infrastructure setup
-└── radical_2photon_core/
-    └── radical_hyperparameters.py  # Reference config
-
-Required external:
-└── lfads-cd/ (radical branch)
-    ├── lfadslite.py           # LFADS model with zi-gamma
-    └── run_lfadslite.py       # Helper functions
-```
+But expect debugging. The simpler approaches above are more reliable.
