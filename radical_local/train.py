@@ -49,11 +49,12 @@ def build_lfads_model(input_shape, cfg):
 
     encoded = tf.keras.layers.Dropout(1 - cfg.DROPOUT_KEEP)(encoded)
 
-    # Initial condition (IC) encoding
-    ic_mean = tf.keras.layers.Dense(cfg.IC_DIM, name='ic_mean')(encoded[:, 0, :])
-    ic_logvar = tf.keras.layers.Dense(cfg.IC_DIM, name='ic_logvar')(encoded[:, 0, :])
+    # Initial condition (IC) - take last encoder state
+    ic_input = tf.keras.layers.GlobalAveragePooling1D()(encoded)
+    ic_mean = tf.keras.layers.Dense(cfg.IC_DIM, name='ic_mean')(ic_input)
+    ic_logvar = tf.keras.layers.Dense(cfg.IC_DIM, name='ic_logvar')(ic_input)
 
-    # Sample IC using reparameterization
+    # Sample IC using reparameterization (wrapped in Lambda for Keras compatibility)
     def sample_ic(args):
         mean, logvar = args
         std = tf.exp(0.5 * logvar)
@@ -62,19 +63,21 @@ def build_lfads_model(input_shape, cfg):
 
     ic = tf.keras.layers.Lambda(sample_ic, name='ic_sample')([ic_mean, ic_logvar])
 
+    # Generator: Use GRU with initial state from IC
+    # First, project IC to generator hidden size
+    gen_init = tf.keras.layers.Dense(cfg.GEN_DIM, activation='tanh', name='gen_init')(ic)
+
+    # Create a learned input sequence for the generator (since LFADS generator is autonomous)
+    # We repeat the initial state across time as input
+    gen_input = tf.keras.layers.RepeatVector(n_timepoints)(gen_init)
+
     # Generator RNN
-    gen_state = tf.keras.layers.Dense(cfg.GEN_DIM, activation='tanh', name='gen_init')(ic)
+    gen_outputs = tf.keras.layers.GRU(
+        cfg.GEN_DIM,
+        return_sequences=True,
+        name='generator'
+    )(gen_input, initial_state=gen_init)
 
-    # Run generator through time
-    gen_cell = tf.keras.layers.GRUCell(cfg.GEN_DIM)
-    gen_outputs = []
-    state = gen_state
-
-    for t in range(n_timepoints):
-        output, [state] = gen_cell(tf.zeros((tf.shape(inputs)[0], 1)), [state])
-        gen_outputs.append(output)
-
-    gen_outputs = tf.stack(gen_outputs, axis=1)  # (batch, time, gen_dim)
     gen_outputs = tf.keras.layers.Dropout(1 - cfg.DROPOUT_KEEP)(gen_outputs)
 
     # Latent factors
@@ -93,7 +96,10 @@ def build_lfads_model(input_shape, cfg):
             n_neurons,
             activation='softplus',
             name='gamma_concentration'
-        )(factors) + 0.1  # Ensure positive
+        )(factors)
+
+        # Add small constant for numerical stability (using Lambda layer)
+        concentration = tf.keras.layers.Lambda(lambda x: x + 0.1)(concentration)
 
         outputs = [rate, concentration]
 
