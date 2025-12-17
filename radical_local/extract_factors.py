@@ -71,7 +71,7 @@ def extract_factors(model_dir, data_path, output_path=None):
     model, factors_layer = build_lfads_model((n_timepoints, n_neurons), cfg)
 
     # Load weights
-    weights_path = os.path.join(model_dir, "weights.h5")
+    weights_path = os.path.join(model_dir, "model.weights.h5")
     model.load_weights(weights_path)
     print("Loaded weights.")
 

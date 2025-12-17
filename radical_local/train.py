@@ -256,7 +256,7 @@ class RADICaLTrainer:
 
     def save_checkpoint(self, path):
         os.makedirs(path, exist_ok=True)
-        self.model.save_weights(os.path.join(path, "weights.h5"))
+        self.model.save_weights(os.path.join(path, "model.weights.h5"))
 
         # Save config
         cfg_dict = {k: v for k, v in vars(self.cfg).items() if not k.startswith('_')}
