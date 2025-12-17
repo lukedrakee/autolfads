@@ -269,11 +269,11 @@ def main():
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
 
     # Load data
-    print(f"\nLoading data from {config.DATA_DIR}...")
+    print(f"\nLoading data from {config.DATA_DIR}/{config.DATA_FILE}...")
     train_data, valid_data = load_data(
         config.DATA_DIR,
-        config.TRAIN_FILE,
-        config.VALID_FILE
+        config.DATA_FILE,
+        config.TRAIN_SPLIT
     )
 
     # Get data shape

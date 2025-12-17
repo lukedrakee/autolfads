@@ -9,44 +9,53 @@ import h5py
 import numpy as np
 
 
-def load_data(data_dir, train_file="train_data.h5", valid_file="valid_data.h5", dataset_key=None):
+def load_data(data_dir, data_file="data.h5", train_split=0.8, dataset_key=None, shuffle=True):
     """
-    Load training and validation data from HDF5 files.
+    Load data from a single HDF5 file and split into train/validation.
 
     Args:
-        data_dir: Directory containing HDF5 files
-        train_file: Training data filename
-        valid_file: Validation data filename
+        data_dir: Directory containing HDF5 file
+        data_file: Data filename
+        train_split: Fraction of data for training (e.g., 0.8 = 80% train, 20% valid)
         dataset_key: Key name in HDF5 file. If None, uses the first dataset found.
+        shuffle: If True, shuffle trials before splitting (recommended)
 
     Expected data shape: (trials, timepoints, neurons)
 
     Returns:
-        train_data: np.array of shape (n_trials, n_timepoints, n_neurons)
-        valid_data: np.array of shape (n_trials, n_timepoints, n_neurons)
+        train_data: np.array of shape (n_train_trials, n_timepoints, n_neurons)
+        valid_data: np.array of shape (n_valid_trials, n_timepoints, n_neurons)
     """
-    train_path = os.path.join(data_dir, train_file)
-    valid_path = os.path.join(data_dir, valid_file)
+    filepath = os.path.join(data_dir, data_file)
 
-    def load_h5(filepath, key=None):
-        with h5py.File(filepath, 'r') as f:
-            if key is None:
-                # Use first dataset found
-                keys = list(f.keys())
-                if len(keys) == 0:
-                    raise ValueError(f"No datasets found in {filepath}")
-                key = keys[0]
-                print(f"  Using dataset key: '{key}'")
-            return f[key][:]
+    print(f"Loading {filepath}...")
+    with h5py.File(filepath, 'r') as f:
+        if dataset_key is None:
+            # Use first dataset found
+            keys = list(f.keys())
+            if len(keys) == 0:
+                raise ValueError(f"No datasets found in {filepath}")
+            dataset_key = keys[0]
+            print(f"  Using dataset key: '{dataset_key}'")
+        data = f[dataset_key][:]
 
-    print(f"Loading {train_path}...")
-    train_data = load_h5(train_path, dataset_key)
+    print(f"Loaded data: {data.shape}")
+    n_trials = data.shape[0]
 
-    print(f"Loading {valid_path}...")
-    valid_data = load_h5(valid_path, dataset_key)
+    # Shuffle trials before splitting
+    if shuffle:
+        np.random.seed(42)  # For reproducibility
+        indices = np.random.permutation(n_trials)
+        data = data[indices]
+        print("  Shuffled trials before splitting")
 
-    print(f"Loaded training data: {train_data.shape}")
-    print(f"Loaded validation data: {valid_data.shape}")
+    # Split into train/validation
+    split_idx = int(n_trials * train_split)
+    train_data = data[:split_idx]
+    valid_data = data[split_idx:]
+
+    print(f"Training data: {train_data.shape} ({split_idx} trials)")
+    print(f"Validation data: {valid_data.shape} ({n_trials - split_idx} trials)")
 
     return train_data.astype(np.float32), valid_data.astype(np.float32)
 
@@ -154,16 +163,16 @@ def save_data(data, filepath, dataset_name="train_data"):
     print(f"Saved data to {filepath}, shape: {data.shape}")
 
 
-def create_example_data(n_trials=200, n_timepoints=100, n_neurons=50, output_dir="./data", zscore=True):
+def create_example_data(n_trials=80, n_timepoints=150, n_neurons=150, output_dir="./data", zscore=True):
     """
     Create synthetic calcium-like data for testing the pipeline.
 
     This generates fake data with realistic properties - use only for testing!
 
     Args:
-        n_trials: Number of trials
-        n_timepoints: Timepoints per trial
-        n_neurons: Number of neurons
+        n_trials: Number of trials (default 80 to match typical experiment)
+        n_timepoints: Timepoints per trial (default 150)
+        n_neurons: Number of neurons (default 150)
         output_dir: Where to save the data
         zscore: If True, z-score the data (for Gaussian output).
                 If False, keep as non-negative (for zi-gamma output).
@@ -199,21 +208,14 @@ def create_example_data(n_trials=200, n_timepoints=100, n_neurons=50, output_dir
     else:
         print("Data kept as non-negative (use OUTPUT_DIST = 'zi-gamma')")
 
-    # Split into train/valid
-    split = int(0.8 * n_trials)
-    train_data = data[:split]
-    valid_data = data[split:]
-
-    # Save
-    save_data(train_data, os.path.join(output_dir, "train_data.h5"))
-    save_data(valid_data, os.path.join(output_dir, "valid_data.h5"))
+    # Save as single file (train.py will split it)
+    save_data(data, os.path.join(output_dir, "data.h5"))
 
     print(f"Created example data in {output_dir}/")
-    print(f"  Training: {train_data.shape}")
-    print(f"  Validation: {valid_data.shape}")
-    print(f"  Data range: [{train_data.min():.2f}, {train_data.max():.2f}]")
+    print(f"  Shape: {data.shape} (trials, timepoints, neurons)")
+    print(f"  Data range: [{data.min():.2f}, {data.max():.2f}]")
 
-    return train_data, valid_data
+    return data
 
 
 if __name__ == "__main__":

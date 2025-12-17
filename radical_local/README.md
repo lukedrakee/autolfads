@@ -32,22 +32,17 @@ python extract_factors.py --model outputs/best_model --data data/valid_data.h5
 
 **If your data is already z-scored in HDF5 format:** No preprocessing needed! Just:
 
-1. Put your files in `data/` (or update paths in `config.py`)
+1. Put your file in `data/data.h5` (or update `DATA_FILE` in config.py)
 2. Make sure shape is `(trials, timepoints, neurons)`
 3. Run `python train.py`
 
-The loader auto-detects the dataset key in your HDF5 file.
+The script will automatically:
+- Auto-detect the dataset key in your HDF5 file
+- Shuffle and split into train/validation (80/20 by default)
 
-**If you need to create HDF5 files:**
+**To change the split ratio**, edit `config.py`:
 ```python
-import h5py
-
-# Your data: (trials, timepoints, neurons)
-with h5py.File('data/train_data.h5', 'w') as f:
-    f.create_dataset('data', data=your_train_array)
-
-with h5py.File('data/valid_data.h5', 'w') as f:
-    f.create_dataset('data', data=your_valid_array)
+TRAIN_SPLIT = 0.8  # 80% train, 20% validation
 ```
 
 ## Key Settings

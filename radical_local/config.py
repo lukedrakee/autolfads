@@ -9,8 +9,12 @@ This is the ONLY file you need to edit to configure training.
 # =============================================================================
 DATA_DIR = "./data"                    # Where your HDF5 data files are
 OUTPUT_DIR = "./outputs"               # Where model checkpoints and results go
-TRAIN_FILE = "train_data.h5"           # Training data filename
-VALID_FILE = "valid_data.h5"           # Validation data filename
+DATA_FILE = "data.h5"                  # Your data filename (single file)
+
+# =============================================================================
+# TRAIN/VALIDATION SPLIT
+# =============================================================================
+TRAIN_SPLIT = 0.8                      # Fraction of data for training (0.8 = 80% train, 20% valid)
 
 # =============================================================================
 # DATA FORMAT - Choose based on your preprocessing
