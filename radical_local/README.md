@@ -59,15 +59,25 @@ python extract_factors.py --model outputs/best_model --data data/valid_data.h5
 In `config.py`:
 
 ```python
-# What makes it RADICaL (for calcium, not spikes)
-OUTPUT_DIST = "zi-gamma"  # Do not change
+# Choose based on your data preprocessing:
+OUTPUT_DIST = "gaussian"   # For z-scored data (can have negative values)
+# OUTPUT_DIST = "zi-gamma" # For raw/dF/F data (non-negative only)
 
 # Tune these based on your data
 FACTORS_DIM = 40      # Latent dimensions (try 10-100)
-GAMMA_PRIOR = 20.0    # Gamma prior (try 1-100)
 BATCH_SIZE = 64       # Reduce if GPU OOM
 MAX_EPOCHS = 500      # Training duration
 ```
+
+## Z-Scored vs Raw Data
+
+| Your Data | Use This Setting |
+|-----------|-----------------|
+| Z-scored (mean=0, std=1) | `OUTPUT_DIST = "gaussian"` |
+| Raw fluorescence | `OUTPUT_DIST = "zi-gamma"` |
+| dF/F (non-negative) | `OUTPUT_DIST = "zi-gamma"` |
+
+**Important:** If your data is z-scored (has negative values), you MUST use `"gaussian"`. The `"zi-gamma"` distribution only works with non-negative data.
 
 ## GPU Memory
 

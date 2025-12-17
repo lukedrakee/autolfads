@@ -13,9 +13,17 @@ TRAIN_FILE = "train_data.h5"           # Training data filename
 VALID_FILE = "valid_data.h5"           # Validation data filename
 
 # =============================================================================
-# RADICaL-SPECIFIC SETTINGS (What makes it work for calcium imaging)
+# DATA FORMAT - Choose based on your preprocessing
 # =============================================================================
-OUTPUT_DIST = "zi-gamma"               # Zero-inflated gamma (DO NOT CHANGE for calcium)
+# Options:
+#   "zi-gamma"  - For raw or dF/F calcium (non-negative values only)
+#   "gaussian"  - For z-scored data (can have negative values)
+#
+# If your data is z-scored, use "gaussian"
+# If your data is raw fluorescence or dF/F, use "zi-gamma"
+OUTPUT_DIST = "gaussian"               # Use "gaussian" for z-scored data
+
+# Only used if OUTPUT_DIST = "zi-gamma"
 GAMMA_PRIOR = 20.0                     # Prior on gamma shape (tune: 1-100)
 S_MIN = 0.1                            # Minimum scale parameter
 

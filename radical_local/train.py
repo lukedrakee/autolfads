@@ -81,16 +81,14 @@ def build_lfads_model(input_shape, cfg):
     factors = tf.keras.layers.Dense(cfg.FACTORS_DIM, name='factors')(gen_outputs)
 
     # Output: predict calcium activity
-    # For zi-gamma, we predict rate and shape parameters
     if cfg.OUTPUT_DIST == 'zi-gamma':
-        # Gamma rate (alpha)
+        # Gamma distribution for raw/dF/F data (non-negative)
         rate = tf.keras.layers.Dense(
             n_neurons,
             activation='softplus',
             name='gamma_rate'
         )(factors)
 
-        # Gamma concentration
         concentration = tf.keras.layers.Dense(
             n_neurons,
             activation='softplus',
@@ -98,9 +96,26 @@ def build_lfads_model(input_shape, cfg):
         )(factors) + 0.1  # Ensure positive
 
         outputs = [rate, concentration]
+
+    elif cfg.OUTPUT_DIST == 'gaussian':
+        # Gaussian distribution for z-scored data (can be negative)
+        mean = tf.keras.layers.Dense(
+            n_neurons,
+            activation=None,  # No activation - can be negative
+            name='gaussian_mean'
+        )(factors)
+
+        # Log-variance (learned)
+        logvar = tf.keras.layers.Dense(
+            n_neurons,
+            activation=None,
+            name='gaussian_logvar'
+        )(factors)
+
+        outputs = [mean, logvar]
+
     else:
-        # Simple mean prediction
-        outputs = tf.keras.layers.Dense(n_neurons, activation='softplus', name='output')(factors)
+        raise ValueError(f"Unknown output_dist: {cfg.OUTPUT_DIST}. Use 'gaussian' or 'zi-gamma'")
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs, name='radical_lfads')
 
@@ -112,8 +127,8 @@ def gamma_nll_loss(y_true, y_pred_rate, y_pred_conc, eps=1e-8):
     Negative log-likelihood for gamma distribution.
 
     For zi-gamma (zero-inflated gamma), this approximates the calcium distribution.
+    Use this for raw or dF/F data (non-negative values).
     """
-    # Gamma NLL
     rate = y_pred_rate + eps
     concentration = y_pred_conc + eps
 
@@ -127,6 +142,19 @@ def gamma_nll_loss(y_true, y_pred_rate, y_pred_conc, eps=1e-8):
     return -tf.reduce_mean(nll)
 
 
+def gaussian_nll_loss(y_true, y_pred_mean, y_pred_logvar):
+    """
+    Negative log-likelihood for Gaussian distribution.
+
+    Use this for z-scored data (can have negative values).
+    """
+    # Gaussian NLL: 0.5 * (logvar + (y - mean)^2 / var)
+    var = tf.exp(y_pred_logvar) + 1e-8
+    nll = 0.5 * (y_pred_logvar + tf.square(y_true - y_pred_mean) / var)
+
+    return tf.reduce_mean(nll)
+
+
 class RADICaLTrainer:
     """Simple trainer for RADICaL model."""
 
@@ -137,16 +165,22 @@ class RADICaLTrainer:
         self.train_losses = []
         self.valid_losses = []
 
+    def compute_loss(self, batch, outputs):
+        """Compute loss based on output distribution type."""
+        if self.cfg.OUTPUT_DIST == 'zi-gamma':
+            rate, conc = outputs
+            return gamma_nll_loss(batch, rate, conc)
+        elif self.cfg.OUTPUT_DIST == 'gaussian':
+            mean, logvar = outputs
+            return gaussian_nll_loss(batch, mean, logvar)
+        else:
+            raise ValueError(f"Unknown output_dist: {self.cfg.OUTPUT_DIST}")
+
     @tf.function
     def train_step(self, batch):
         with tf.GradientTape() as tape:
             outputs = self.model(batch, training=True)
-
-            if isinstance(outputs, list):
-                rate, conc = outputs
-                loss = gamma_nll_loss(batch, rate, conc)
-            else:
-                loss = tf.reduce_mean(tf.square(batch - outputs))
+            loss = self.compute_loss(batch, outputs)
 
             # L2 regularization
             l2_loss = sum(tf.nn.l2_loss(w) for w in self.model.trainable_weights)
@@ -159,13 +193,7 @@ class RADICaLTrainer:
 
     def evaluate(self, data):
         outputs = self.model(data, training=False)
-
-        if isinstance(outputs, list):
-            rate, conc = outputs
-            loss = gamma_nll_loss(data, rate, conc)
-        else:
-            loss = tf.reduce_mean(tf.square(data - outputs))
-
+        loss = self.compute_loss(data, outputs)
         return float(loss)
 
     def train(self, train_data, valid_data, epochs):
