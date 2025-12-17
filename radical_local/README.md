@@ -30,29 +30,25 @@ python extract_factors.py --model outputs/best_model --data data/valid_data.h5
 
 ## Using Your Own Data
 
-1. Format your calcium data as HDF5:
-   ```python
-   import h5py
-   import numpy as np
+**If your data is already z-scored in HDF5 format:** No preprocessing needed! Just:
 
-   # Your data: (trials, timepoints, neurons)
-   calcium_data = ...  # Shape: (500, 100, 150)
+1. Put your files in `data/` (or update paths in `config.py`)
+2. Make sure shape is `(trials, timepoints, neurons)`
+3. Run `python train.py`
 
-   with h5py.File('data/train_data.h5', 'w') as f:
-       f.create_dataset('train_data', data=calcium_data)
-   ```
+The loader auto-detects the dataset key in your HDF5 file.
 
-2. Edit `config.py`:
-   ```python
-   DATA_DIR = "./data"
-   TRAIN_FILE = "train_data.h5"
-   VALID_FILE = "valid_data.h5"
-   ```
+**If you need to create HDF5 files:**
+```python
+import h5py
 
-3. Run training:
-   ```bash
-   python train.py
-   ```
+# Your data: (trials, timepoints, neurons)
+with h5py.File('data/train_data.h5', 'w') as f:
+    f.create_dataset('data', data=your_train_array)
+
+with h5py.File('data/valid_data.h5', 'w') as f:
+    f.create_dataset('data', data=your_valid_array)
+```
 
 ## Key Settings
 

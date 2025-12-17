@@ -9,11 +9,17 @@ import h5py
 import numpy as np
 
 
-def load_data(data_dir, train_file="train_data.h5", valid_file="valid_data.h5"):
+def load_data(data_dir, train_file="train_data.h5", valid_file="valid_data.h5", dataset_key=None):
     """
     Load training and validation data from HDF5 files.
 
-    Expected format: HDF5 with 'train_data' dataset of shape (trials, time, neurons)
+    Args:
+        data_dir: Directory containing HDF5 files
+        train_file: Training data filename
+        valid_file: Validation data filename
+        dataset_key: Key name in HDF5 file. If None, uses the first dataset found.
+
+    Expected data shape: (trials, timepoints, neurons)
 
     Returns:
         train_data: np.array of shape (n_trials, n_timepoints, n_neurons)
@@ -22,11 +28,22 @@ def load_data(data_dir, train_file="train_data.h5", valid_file="valid_data.h5"):
     train_path = os.path.join(data_dir, train_file)
     valid_path = os.path.join(data_dir, valid_file)
 
-    with h5py.File(train_path, 'r') as f:
-        train_data = f['train_data'][:]
+    def load_h5(filepath, key=None):
+        with h5py.File(filepath, 'r') as f:
+            if key is None:
+                # Use first dataset found
+                keys = list(f.keys())
+                if len(keys) == 0:
+                    raise ValueError(f"No datasets found in {filepath}")
+                key = keys[0]
+                print(f"  Using dataset key: '{key}'")
+            return f[key][:]
 
-    with h5py.File(valid_path, 'r') as f:
-        valid_data = f['train_data'][:]  # Same key name by convention
+    print(f"Loading {train_path}...")
+    train_data = load_h5(train_path, dataset_key)
+
+    print(f"Loading {valid_path}...")
+    valid_data = load_h5(valid_path, dataset_key)
 
     print(f"Loaded training data: {train_data.shape}")
     print(f"Loaded validation data: {valid_data.shape}")
